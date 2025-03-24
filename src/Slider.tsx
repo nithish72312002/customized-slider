@@ -277,71 +277,75 @@ const SliderComponent = (
       }
     : null;
 
-  const onSlidingCompleteEvent = onSlidingComplete
-    ? (event: Event) => {
-        let finalValue = event.nativeEvent.value;
+  // Create a handler for snapping logic that works whether onSlidingComplete is provided or not
+  const onSlidingCompleteEvent = (event: Event) => {
+    let finalValue = event.nativeEvent.value;
+    let didSnap = false;
+    
+    // Apply threshold snapping if disableSnap is true and snapThreshold is provided
+    if (localProps.disableSnap && localProps.snapThreshold !== undefined && localProps.step) {
+      // Calculate the nearest step
+      const step = localProps.step;
+      const min = localProps.minimumValue || 0;
+      
+      console.log(
+        `[SLIDER DEBUG] Snapping logic:
+         - Current value: ${finalValue}
+         - Step size: ${step}
+         - Threshold: ${localProps.snapThreshold}`
+      );
+      
+      // Calculate nearest step value
+      const stepsFromMin = Math.round((finalValue - min) / step);
+      const nearestStepValue = min + stepsFromMin * step;
+      
+      // Check if we're within the threshold of the nearest step
+      const distanceToNearestStep = Math.abs(finalValue - nearestStepValue);
+      
+      console.log(
+        `[SLIDER DEBUG] Calculations:
+         - Nearest step value: ${nearestStepValue}
+         - Distance to nearest step: ${distanceToNearestStep}
+         - Should snap: ${distanceToNearestStep <= localProps.snapThreshold}`
+      );
+      
+      if (distanceToNearestStep <= localProps.snapThreshold) {
+        // Important: This updates both the state and the underlying native component
+        finalValue = nearestStepValue;
+        didSnap = true;
         
-        // Apply threshold snapping if disableSnap is true and snapThreshold is provided
-        if (localProps.disableSnap && localProps.snapThreshold !== undefined && localProps.step) {
-          // Calculate the nearest step
-          const step = localProps.step;
-          const min = localProps.minimumValue || 0;
-          
-          console.log(
-            `[SLIDER DEBUG] Snapping logic:
-             - Current value: ${finalValue}
-             - Step size: ${step}
-             - Threshold: ${localProps.snapThreshold}`
-          );
-          
-          // Calculate nearest step value
-          const stepsFromMin = Math.round((finalValue - min) / step);
-          const nearestStepValue = min + stepsFromMin * step;
-          
-          // Check if we're within the threshold of the nearest step
-          const distanceToNearestStep = Math.abs(finalValue - nearestStepValue);
-          
-          console.log(
-            `[SLIDER DEBUG] Calculations:
-             - Nearest step value: ${nearestStepValue}
-             - Distance to nearest step: ${distanceToNearestStep}
-             - Should snap: ${distanceToNearestStep <= localProps.snapThreshold}`
-          );
-          
-          if (distanceToNearestStep <= localProps.snapThreshold) {
-            // Important: This updates both the state and the underlying native component
-            finalValue = nearestStepValue;
+        // Force update the UI immediately - this is critical!
+        setCurrentValue(finalValue);
+        
+        // Attempt to update native props if ref is available
+        if (forwardedRef) {
+          try {
+            // Try to access the current property safely
+            const nativeRef = 
+              typeof forwardedRef === 'function' 
+                ? null // Can't access .current on function refs
+                : forwardedRef.current;
             
-            // Force update the UI immediately - this is critical!
-            setCurrentValue(finalValue);
-            
-            // Attempt to update native props if ref is available
-            if (forwardedRef) {
-              try {
-                // Try to access the current property safely
-                const nativeRef = 
-                  typeof forwardedRef === 'function' 
-                    ? null // Can't access .current on function refs
-                    : forwardedRef.current;
-                
-                if (nativeRef && typeof nativeRef.setNativeProps === 'function') {
-                  nativeRef.setNativeProps({ value: finalValue });
-                }
-              } catch (err) {
-                console.warn('[SLIDER] Failed to update native props:', err);
-              }
+            if (nativeRef && typeof nativeRef.setNativeProps === 'function') {
+              nativeRef.setNativeProps({ value: finalValue });
             }
-            
-            // Notify about value change with the snapped value
-            onValueChange && onValueChange(finalValue);
-            
-            console.log(`[SLIDER DEBUG] Snapped to: ${finalValue}`);
+          } catch (err) {
+            console.warn('[SLIDER] Failed to update native props:', err);
           }
         }
         
-        onSlidingComplete(finalValue);
+        // Notify about value change with the snapped value
+        onValueChange && onValueChange(finalValue);
+        
+        console.log(`[SLIDER DEBUG] Snapped to: ${finalValue}`);
       }
-    : null;
+    }
+    
+    // Call the user's onSlidingComplete callback if provided
+    if (onSlidingComplete) {
+      onSlidingComplete(finalValue);
+    }
+  };
 
   const onAccessibilityActionEvent = onAccessibilityAction
     ? (event: AccessibilityActionEvent) => {
